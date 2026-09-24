@@ -1,8 +1,18 @@
 // index.js
 require('dotenv').config();
+const express = require('express');
 const mongoose = require('mongoose');
 const { startPostScheduler } = require('./src/jobs/postScheduler');
 const { startDailyContentJob, generateNextDailyPost } = require('./src/jobs/contentCreator');
+const Post = require('./src/models/Post');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Simple health check endpoint for Cloud Server (UptimeRobot yahan ping karega)
+app.get('/', (req, res) => {
+  res.send('DevSprint AI Pipeline is running 24/7 🚀');
+});
 
 const startDevSprintEngine = async () => {
   try {
@@ -20,7 +30,6 @@ const startDevSprintEngine = async () => {
     startDailyContentJob();
 
     // Agar queue mein koi pending post nahi hai toh start hote hi ek create kar lo
-    const Post = require('./src/models/Post');
     const pendingCount = await Post.countDocuments({ status: 'PENDING' });
     
     if (pendingCount === 0) {
@@ -35,11 +44,10 @@ const startDevSprintEngine = async () => {
   }
 };
 
-startDevSprintEngine();
 // Bind port and start engine immediately
 app.listen(PORT, () => {
-    console.log(`🌍 Server is listening on port ${PORT}`);
-    
-    // Isko bina await lagaye call karenge taaki Render port scan fail na kare
-    startDevSprintEngine();
-  });
+  console.log(`🌍 Server is listening on port ${PORT}`);
+  
+  // Isko bina await lagaye call karenge taaki Render port scan fail na kare
+  startDevSprintEngine();
+});
