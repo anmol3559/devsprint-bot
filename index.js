@@ -36,3 +36,10 @@ const startDevSprintEngine = async () => {
 };
 
 startDevSprintEngine();
+// Bind port and start engine immediately
+app.listen(PORT, () => {
+    console.log(`🌍 Server is listening on port ${PORT}`);
+    
+    // Isko bina await lagaye call karenge taaki Render port scan fail na kare
+    startDevSprintEngine();
+  });
