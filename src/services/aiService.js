@@ -6,7 +6,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // JSON mode enabled for strict, parseable outputs
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-3.5-flash",
+    model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
     generationConfig: { responseMimeType: "application/json" }
 });
 
