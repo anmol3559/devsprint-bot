@@ -5,7 +5,7 @@ const postSchema = new mongoose.Schema(
   {
     imageUrl: {
       type: String,
-      required: true,
+      default: null,
     },
     caption: {
       type: String,
@@ -16,7 +16,33 @@ const postSchema = new mongoose.Schema(
       enum: ['PENDING', 'PUBLISHED', 'FAILED'],
       default: 'PENDING',
     },
+    instagramStatus: {
+      type: String,
+      enum: ['PENDING', 'PUBLISHED', 'FAILED', 'SKIPPED'],
+      default: 'PENDING',
+    },
+    youtubeStatus: {
+      type: String,
+      enum: ['PENDING', 'PUBLISHED', 'FAILED', 'SKIPPED'],
+      default: 'PENDING',
+    },
     instagramPostId: {
+      type: String,
+      default: null,
+    },
+    youtubeVideoId: {
+      type: String,
+      default: null,
+    },
+    title: {
+      type: String,
+      default: null,
+    },
+    tags: {
+      type: [String],
+      default: [],
+    },
+    videoPath: {
       type: String,
       default: null,
     },
