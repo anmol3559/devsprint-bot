@@ -20,6 +20,7 @@
     "googleapis": "^181.0.0",
     "instagram-graph-api": "^7.0.0",
     "mongoose": "^6.13.0",
-    "node-cron": "^4.6.0"
+    "node-cron": "^4.6.0",
+    "sharp": "^0.35.5"
   }
 }

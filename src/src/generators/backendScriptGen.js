@@ -16,14 +16,10 @@ const generateBackendScript = async (concept, analogy) => {
 
     const aiData = await generateAIContent(prompt);
 
-    // Create a conceptual ASCII diagram for the image
-    const codeVisual = `# ${concept} Architecture\n\nClient Request\n      ↓\n[${concept}]\n      ↓\n  Response\n`;
-
     return {
         title: `How ${concept} ACTUALLY Works 🤯 Explained in 60s | DevSprint`,
         description: `Ever wondered how ${concept} handles massive scale? We break it down using a simple real-world analogy. 💻⚡\n\n📌 Subscribe to @devsprint00 to master Full Stack Architecture!\n\n#backend #nodejs #systemdesign #softwaredeveloper #devsprint`,
         tags: ["Backend Development", "System Design", concept, "Web Architecture", "DevSprint"],
-        codeVisual,
         videoScript: {
             hook: `(0-5s): "You use ${concept} every day, but do you actually know how it works under the hood?"`,
             analogyIntro: `(5-20s): "Think of it like ${analogy}. When a request comes in, it doesn't just wait in line."`,

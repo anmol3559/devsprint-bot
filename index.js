@@ -1,4 +1,4 @@
-// index.js
+// Entry point - unchanged
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -9,7 +9,7 @@ const Post = require('./src/models/Post');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Simple health check endpoint for Cloud Server (UptimeRobot yahan ping karega)
+// Simple health check endpoint
 app.get('/', (req, res) => {
   res.send('DevSprint AI Pipeline is running 24/7 🚀');
 });
@@ -24,10 +24,9 @@ const startDevSprintEngine = async () => {
     console.log("✅ MongoDB Connected Successfully.");
 
     // Hermes Agent - The autonomous brain of DevSprint AI
-    // Replaces legacy schedulers to avoid duplicate post publishing
     startHermesAgent();
 
-    // 3. Initial queue check
+    // Initial queue check
     const pendingCount = await Post.countDocuments({ status: 'PENDING' });
     if (pendingCount === 0) {
       console.log("⚡ Queue is empty. Generating an initial post right away...");
@@ -45,10 +44,7 @@ const startDevSprintEngine = async () => {
   }
 };
 
-// Bind port and start engine immediately
 app.listen(PORT, () => {
   console.log(`🌍 Server is listening on port ${PORT}`);
-  
-  // Isko bina await lagaye call karenge taaki Render port scan fail na kare
   startDevSprintEngine();
 });

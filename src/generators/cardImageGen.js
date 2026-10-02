@@ -78,7 +78,7 @@ function getColoredCode(codeLines) {
       .replace('<tspan fill="#f289b2">op</tspan>', '$&'.replace('op', '${m}'));
 
     // Simple replacement without regex complexity
-    const result: string[] = [];
+    const result = [];
     let idx = 0;
     while (idx < coloredLine.length) {
       if (coloredLine.startsWith('<tspan', idx)) {
