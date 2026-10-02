@@ -49,12 +49,13 @@ async function generateNextDailyPost() {
       selectedTopic.pattern
     );
 
-    // Extract C++ code
-    const rawCode = aiData.videoScript?.codeVisual || '';
+    // Extract C++ code - use raw codeVisual, not the formatted videoScript version
+    const rawCode = aiData.codeVisual || '';
+    // Extract just the C++ function (vector/int/bool/void return types)
     const codeMatch = rawCode.match(
-      /vector<[\s\S]*?\n\}|int\s+[\s\S]*?\n\}|bool\s+[\s\S]*?\n\}|void\s+[\s\S]*?\n\}/
-    ) || [rawCode];
-    const cleanCode = codeMatch[0] || rawCode;
+      /(?:vector|int|bool|void)\s+[\s\S]*?\n\}/
+    );
+    const cleanCode = codeMatch ? codeMatch[0] : rawCode;
 
     // 4. Generate Code Card Image (for Instagram)
     console.log('[Content Creator] Generating code card image...');
@@ -118,18 +119,34 @@ async function generateBackendPost() {
     // Format caption
     const caption = `${aiData.title}\n\n${aiData.description}\n\n💡 Technical Deep Dive:\n${aiData.videoScript?.technicalDeepDive || ''}\n\n${aiData.videoScript?.useCase || ''}\n\n#backend #nodejs #systemdesign #devsprint`;
 
-    // Queue post (image-only for architecture, video can be added later)
+    // 4. Generate Code Card Image (for Instagram)
+    let imageUrl = null;
+    if (aiData.codeVisual) {
+      console.log('[Content Creator] Generating backend architecture image...');
+      try {
+        imageUrl = await generateCodeCardImage(
+          aiData.codeVisual,
+          `${concept.concept} - Architecture`
+        );
+        console.log('[Content Creator] Backend image generated');
+      } catch (imgErr) {
+        console.error('[Content Creator] Backend image generation failed:', imgErr.message);
+        imageUrl = null;
+      }
+    }
+
+    // Queue post
     try {
       const newPost = await Post.create({
-        imageUrl: null, // Backend posts start with video only
+        imageUrl,
         videoPath: null,
         title: aiData.title,
         caption,
         tags: aiData.tags || [],
         scheduledFor: new Date(),
         status: 'PENDING',
-        instagramStatus: 'SKIPPED', // No image, so skip Instagram
-        youtubeStatus: 'PENDING',
+        instagramStatus: imageUrl ? 'PENDING' : 'SKIPPED', // Only Instagram if image exists
+        youtubeStatus: 'SKIPPED',
       });
 
       console.log(`[Content Creator] ✅ Backend post queued with ID: ${newPost._id}`);

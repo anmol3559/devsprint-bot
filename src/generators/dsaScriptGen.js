@@ -21,6 +21,8 @@ const generateDSAScript = async (problemName, difficulty, topic) => {
         title: `Crack ${problemName} in 60 Seconds! 🚀 C++ ${topic} | DevSprint`,
         description: `Struggling with ${problemName}? Here is the optimal C++ solution explained in under a minute! 👇\n\n📌 Subscribe to @devsprint00 for daily coding concepts & backend architectures!\n\n#cpp #datastructures #leetcode #coding #softwareengineering`,
         tags: ["C++", "DSA", "LeetCode", problemName, "Coding Interview", "DevSprint"],
+        // Keep the raw snippet separate so image generation receives clean C++.
+        codeVisual: aiData.codeVisual,
         videoScript: {
             hook: `(0-5s): "Stop skipping ${topic} problems! Let's crack ${problemName} in exactly 60 seconds."`,
             problemStatement: `(5-15s): "${aiData.problemStatement}"`,
