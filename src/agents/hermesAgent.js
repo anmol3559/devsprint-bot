@@ -15,6 +15,7 @@ const Post = require('../models/Post');
 const { generateNextDailyPost, generateBackendPost } = require('../jobs/contentCreator');
 const { publishToInstagram } = require('../services/instagramService');
 const { uploadToYouTube } = require('../services/youtubeService');
+const logger = require('../utils/logger');
 
 // Hermes configuration
 const HERMES_CONFIG = {
@@ -35,6 +36,16 @@ const hermesAnalytics = {
   lastGeneration: null,
   lastPublish: null,
   recentFailures: [],
+  // Track per-post-type analytics
+  byType: {
+    dsa: { generated: 0, published: 0, failed: 0 },
+    backend: { generated: 0, published: 0, failed: 0 },
+  },
+  // API call metrics
+  apiMetrics: {
+    gemini: { calls: 0, errors: 0, totalLatencyMs: 0 },
+    instagram: { calls: 0, errors: 0, totalLatencyMs: 0 },
+  },
 };
 
 /**
@@ -71,11 +82,13 @@ async function isDailyLimitReached() {
  * Called periodically to make autonomous decisions
  */
 async function hermesCycle() {
-  try {
-    console.log('\n[HERMES] 🔮 Autonomous cycle starting...');
-    const timestamp = new Date().toISOString();
-    console.log(`[HERMES] ${timestamp} - IST Hour: ${getISTHour()}`);
+  const cycleStart = Date.now();
+  logger.info('Autonomous cycle starting', {
+    istHour: getISTHour(),
+    isPeakTime: isOptimalPublishTime(),
+  });
 
+  try {
     // Get current queue state
     const pendingPosts = await Post.find({ status: 'PENDING' });
     const failedPosts = await Post.find({
@@ -85,7 +98,10 @@ async function hermesCycle() {
       ],
     });
 
-    console.log(`[HERMES] Queue: ${pendingPosts.length} pending, ${failedPosts.length} failed`);
+    logger.info('Queue state retrieved', {
+      pendingCount: pendingPosts.length,
+      failedCount: failedPosts.length,
+    });
 
     // Decision 1: Should we generate new content?
     await hermesDecideContentGeneration(pendingPosts.length);
@@ -96,16 +112,19 @@ async function hermesCycle() {
     // Decision 3: Should we publish pending posts now?
     await hermesPublishPending(pendingPosts);
 
-    // Log analytics
-    hermesAnalytics.lastPublish = timestamp;
-    console.log(`[HERMES] ✅ Cycle complete. Stats: ${JSON.stringify({
-      generated: hermesAnalytics.totalGenerated,
-      published: hermesAnalytics.totalPublished,
-      failed: hermesAnalytics.totalFailed,
-    })}\n`);
+    const cycleLatency = Date.now() - cycleStart;
+    hermesAnalytics.lastPublish = new Date().toISOString();
+    logger.info('Cycle complete', {
+      stats: {
+        generated: hermesAnalytics.totalGenerated,
+        published: hermesAnalytics.totalPublished,
+        failed: hermesAnalytics.totalFailed,
+      },
+      latencyMs: cycleLatency,
+    });
 
   } catch (err) {
-    console.error('[HERMES] ❌ Cycle error:', err.message);
+    logger.error('Cycle error', { error: err.message, stack: err.stack });
   }
 }
 
@@ -118,12 +137,14 @@ async function hermesDecideContentGeneration(pendingCount) {
   const queueLow = pendingCount < HERMES_CONFIG.MIN_QUEUE_SIZE;
 
   if (!underLimit) {
-    console.log('[HERMES] Daily limit reached, skipping generation.');
+    logger.info('Daily limit reached, skipping generation', { pendingCount });
     return;
   }
 
   if (queueLow) {
-    console.log(`[HERMES] Queue low (${pendingCount}), generating new content...`);
+    logger.info('Queue low, generating new content', { pendingCount });
+    const genStart = Date.now();
+
     try {
       // Alternate between DSA and Backend posts
       const recentPosts = await Post.find({}).sort({ createdAt: -1 }).limit(1);
@@ -132,15 +153,30 @@ async function hermesDecideContentGeneration(pendingCount) {
         recentPosts[0].title.includes('How ');
 
       if (lastWasBackend) {
-        await generateNextDailyPost();
-        console.log('[HERMES] DSA post generated');
+        const post = await generateNextDailyPost();
+        logger.postEvent('generated', post._id, {
+          type: 'dsa',
+          title: post.title,
+          latencyMs: Date.now() - genStart,
+        });
+        hermesAnalytics.totalGenerated++;
+        hermesAnalytics.byType.dsa.generated++;
       } else {
-        await generateBackendPost();
-        console.log('[HERMES] Backend post generated');
+        const post = await generateBackendPost();
+        logger.postEvent('generated', post._id, {
+          type: 'backend',
+          title: post.title,
+          latencyMs: Date.now() - genStart,
+        });
+        hermesAnalytics.totalGenerated++;
+        hermesAnalytics.byType.backend.generated++;
       }
-      hermesAnalytics.totalGenerated++;
     } catch (genErr) {
-      console.error('[HERMES] Generation failed:', genErr.message);
+      logger.error('Content generation failed', {
+        error: genErr.message,
+        latencyMs: Date.now() - genStart,
+      });
+      hermesAnalytics.totalFailed++;
       hermesAnalytics.recentFailures.push({
         type: 'generation',
         error: genErr.message,
@@ -148,7 +184,7 @@ async function hermesDecideContentGeneration(pendingCount) {
       });
     }
   } else {
-    console.log(`[HERMES] Queue healthy (${pendingCount} pending), no generation needed.`);
+    logger.info('Queue healthy, no generation needed', { pendingCount });
   }
 }
 
@@ -165,26 +201,32 @@ async function hermesRetryFailedPosts(failedPosts) {
   });
 
   if (retryable.length === 0) {
-    console.log('[HERMES] No posts ready for retry.');
+    logger.info('No posts ready for retry', { totalFailed: failedPosts.length });
     return;
   }
 
-  console.log(`[HERMES] Retrying ${retryable.length} failed post(s)...`);
+  logger.info('Retrying failed posts', { count: retryable.length, totalFailed: failedPosts.length });
 
   for (const post of retryable) {
     try {
+      const retryDetails = {};
+
       // Reset status for retry
       if (post.instagramStatus === 'FAILED' && post.imageUrl) {
         post.instagramStatus = 'PENDING';
-        console.log(`[HERMES] Retrying Instagram post: ${post._id}`);
+        retryDetails.instagram = 'reset to PENDING';
       }
       if (post.youtubeStatus === 'FAILED' && post.videoPath) {
         post.youtubeStatus = 'PENDING';
-        console.log(`[HERMES] Retrying YouTube post: ${post._id}`);
+        retryDetails.youtube = 'reset to PENDING';
       }
       await post.save();
+      logger.postEvent('retry_scheduled', post._id, retryDetails);
     } catch (retryErr) {
-      console.error(`[HERMES] Retry failed for ${post._id}:`, retryErr.message);
+      logger.error('Post retry failed', {
+        postId: post._id?.toString(),
+        error: retryErr.message,
+      });
     }
   }
 }
@@ -199,7 +241,7 @@ async function hermesPublishPending(pendingPosts) {
   const publishable = pendingPosts.filter(post => {
     const postId = post._id.toString();
     if (seenIds.has(postId)) {
-      console.log(`[HERMES] ⚠️ Duplicate post detected and skipped: ${postId}`);
+      logger.warn('Duplicate post detected and skipped', { postId });
       return false;
     }
     seenIds.add(postId);
@@ -210,38 +252,57 @@ async function hermesPublishPending(pendingPosts) {
   });
 
   if (publishable.length === 0) {
-    console.log('[HERMES] No posts ready to publish now.');
+    logger.info('No posts ready to publish now', { pendingCount: pendingPosts.length });
     return;
   }
 
   // If it's peak hours, publish; otherwise wait
   if (!isOptimalPublishTime()) {
-    console.log(`[HERMES] Not peak hours (now: ${getISTHour()} IST), will publish during peak hours.`);
+    logger.info('Not peak hours, will publish during peak hours', {
+      currentISTHour: getISTHour(),
+      readyToPublish: publishable.length,
+    });
     return;
   }
 
-  console.log(`[HERMES] Publishing ${publishable.length} post(s) during peak hours...`);
+  logger.info('Publishing posts during peak hours', { count: publishable.length });
 
   for (const post of publishable) {
+    const publishStart = Date.now();
+
     try {
+      // Track API calls
+      const apiMetrics = { instagramLatency: 0, youtubeLatency: 0, instagramStatus: 'skipped', youtubeStatus: 'skipped' };
+
       // Publish to Instagram
       if (post.instagramStatus === 'PENDING' && post.imageUrl) {
+        const igStart = Date.now();
         try {
           const igRes = await publishToInstagram(post.imageUrl, post.caption);
           post.instagramPostId = igRes.postId;
           post.instagramStatus = 'PUBLISHED';
           hermesAnalytics.totalPublished++;
-          console.log(`[HERMES] ✅ Instagram published: ${igRes.postId}`);
+          apiMetrics.instagramStatus = 'published';
+          apiMetrics.instagramLatency = Date.now() - igStart;
+          hermesAnalytics.apiMetrics.instagram.calls++;
+          hermesAnalytics.apiMetrics.instagram.totalLatencyMs += apiMetrics.instagramLatency;
+          logger.postEvent('instagram_published', post._id, { postId: igRes.postId, latencyMs: apiMetrics.instagramLatency });
         } catch (igErr) {
           post.instagramStatus = 'FAILED';
           post.errorLog = (post.errorLog || '') + `\n[Instagram] ${igErr.message}`;
           hermesAnalytics.totalFailed++;
-          console.error(`[HERMES] ❌ Instagram failed: ${igErr.message}`);
+          apiMetrics.instagramStatus = 'failed';
+          apiMetrics.instagramLatency = Date.now() - igStart;
+          hermesAnalytics.apiMetrics.instagram.calls++;
+          hermesAnalytics.apiMetrics.instagram.errors++;
+          hermesAnalytics.apiMetrics.instagram.totalLatencyMs += apiMetrics.instagramLatency;
+          logger.postEvent('instagram_failed', post._id, { error: igErr.message, latencyMs: apiMetrics.instagramLatency });
         }
       }
 
       // Publish to YouTube
       if (post.youtubeStatus === 'PENDING' && post.videoPath) {
+        const ytStart = Date.now();
         try {
           const ytRes = await uploadToYouTube(post.videoPath, {
             title: post.title || post.caption.substring(0, 100),
@@ -251,12 +312,21 @@ async function hermesPublishPending(pendingPosts) {
           post.youtubeVideoId = ytRes.id;
           post.youtubeStatus = 'PUBLISHED';
           hermesAnalytics.totalPublished++;
-          console.log(`[HERMES] ✅ YouTube published: ${ytRes.id}`);
+          apiMetrics.youtubeStatus = 'published';
+          apiMetrics.youtubeLatency = Date.now() - ytStart;
+          hermesAnalytics.apiMetrics.youtube.calls++;
+          hermesAnalytics.apiMetrics.youtube.totalLatencyMs += apiMetrics.youtubeLatency;
+          logger.postEvent('youtube_published', post._id, { videoId: ytRes.id, latencyMs: apiMetrics.youtubeLatency });
         } catch (ytErr) {
           post.youtubeStatus = 'FAILED';
           post.errorLog = (post.errorLog || '') + `\n[YouTube] ${ytErr.message}`;
           hermesAnalytics.totalFailed++;
-          console.error(`[HERMES] ❌ YouTube failed: ${ytErr.message}`);
+          apiMetrics.youtubeStatus = 'failed';
+          apiMetrics.youtubeLatency = Date.now() - ytStart;
+          hermesAnalytics.apiMetrics.youtube.calls++;
+          hermesAnalytics.apiMetrics.youtube.errors++;
+          hermesAnalytics.apiMetrics.youtube.totalLatencyMs += apiMetrics.youtubeLatency;
+          logger.postEvent('youtube_failed', post._id, { error: ytErr.message, latencyMs: apiMetrics.youtubeLatency });
         }
       }
 
@@ -269,8 +339,15 @@ async function hermesPublishPending(pendingPosts) {
       }
 
       await post.save();
+      logger.postEvent('post_cycle_complete', post._id, {
+        totalLatencyMs: Date.now() - publishStart,
+        ...apiMetrics,
+      });
     } catch (publishErr) {
-      console.error(`[HERMES] Publish error for ${post._id}:`, publishErr.message);
+      logger.postEvent('publish_error', post._id, {
+        error: publishErr.message,
+        totalLatencyMs: Date.now() - publishStart,
+      });
     }
   }
 }
@@ -299,7 +376,7 @@ function startHermesAgent() {
         scheduledFor: { $lte: new Date() },
       });
       if (pending.length > 0) {
-        console.log(`[HERMES] ⏰ Peak hour detected, ${pending.length} post(s) ready to publish`);
+        logger.info('Peak hour detected, publishing pending posts', { count: pending.length });
         await hermesPublishPending(pending);
       }
     }
