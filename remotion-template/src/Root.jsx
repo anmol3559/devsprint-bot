@@ -1,6 +1,5 @@
 import { Composition } from 'remotion';
 import { DevSprintReel } from './DevSprintReel';
-import './style.css'; // Yahan tera Tailwind CSS import hoga
 
 export const RemotionRoot = () => {
   return (
@@ -13,11 +12,11 @@ export const RemotionRoot = () => {
         width={1080}
         height={1920}
         defaultProps={{
-          hook: "Stop scrolling, dev! Ye API trick tujhe nahi pata hogi.",
-          scriptBody: "MongoDB aggregations ko 10x fast karne ke liye indexing use karo. Backend architecture mein local agents integrate karna seekho.",
+          hook: "Stop skipping tech concepts! Let's break this down in 60 seconds.",
+          scriptBody: "In this DevSprint short, we break down complex backend architecture using real-world analogies.",
           callToAction: "Follow DevSprint for daily tech tips!",
-          onScreenText: ["MongoDB", "Backend", "AI Agents"],
-          audioUrl: "" // Backend se path yahan pass hoga
+          onScreenText: ["backend", "architecture", "scalability"],
+          audioUrl: "",
         }}
       />
     </>

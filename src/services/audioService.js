@@ -3,29 +3,33 @@ const fs = require('fs');
 const path = require('path');
 
 const HF_TOKEN = process.env.HF_TOKEN;
-// Try both endpoints for redundancy
+
+// Use a proper TTS model endpoint - try multiple options
 const VOICE_AI_URLS = [
-  'https://api-inference.huggingface.co/models/Qwen/Qwen3-TTS',
-  'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Chat'
+  'https://api-inference.huggingface.co/models/facebook/wav2vec2-ljspeech-distilled',
+  'https://api-inference.huggingface.co/models/facebook/mms-tts-eng',
+  'https://api-inference.huggingface.co/models/facebook/fastspeech2-ljspeech',
 ];
-let VOICE_AI_URL = VOICE_AI_URLS[0];
 
 async function generateAudioFromText(text, filename) {
-    console.log(`🎙️ Qwen3-TTS AI voiceover generate kar raha hai...`);
-    
+    if (!HF_TOKEN) {
+        throw new Error('HF_TOKEN (HuggingFace API token) is required for TTS audio generation');
+    }
+
+    console.log(`🎙️ Generating TTS audio via HuggingFace Inference API...`);
+
     const outputDir = path.join(__dirname, '../../output/audios');
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
-    
-    // Hugging Face standard .wav format deta hai
+
     const finalFilename = filename.replace('.mp3', '.wav');
     const outputPath = path.join(outputDir, finalFilename);
 
-    // Try multiple HF endpoints if one fails
     let lastError;
     for (const url of VOICE_AI_URLS) {
         try {
+            console.log(`   Trying HF endpoint: ${url}`);
             const response = await axios({
                 method: 'POST',
                 url,
@@ -43,7 +47,7 @@ async function generateAudioFromText(text, filename) {
 
             return new Promise((resolve, reject) => {
                 writer.on('finish', () => {
-                    console.log(`✅ Audio saved successfully at: ${outputPath}`);
+                    console.log(`✅ Audio saved at: ${outputPath}`);
                     resolve(outputPath);
                 });
                 writer.on('error', (err) => reject(err));
@@ -51,10 +55,10 @@ async function generateAudioFromText(text, filename) {
 
         } catch (error) {
             lastError = error;
-            console.log(`⚠️ Trying next endpoint:`, url);
+            console.log(`⚠️ Endpoint failed: ${url} - ${error.message}`);
         }
     }
-    throw new Error(`All Hugging Face endpoints failed: ${lastError?.message || 'Unknown error'}`);
+    throw new Error(`All HuggingFace endpoints failed: ${lastError?.message || 'Unknown error'}`);
 }
 
 module.exports = { generateAudioFromText };

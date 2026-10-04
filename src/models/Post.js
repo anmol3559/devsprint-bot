@@ -34,6 +34,15 @@ const postSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    type: {
+      type: String,
+      enum: ['dsa', 'backend'],
+      default: null,
+    },
+    retryCount: {
+      type: Number,
+      default: 0,
+    },
     title: {
       type: String,
       default: null,

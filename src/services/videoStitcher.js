@@ -1,7 +1,8 @@
 // src/services/videoStitcher.js
 const path = require('path');
+const fs = require('fs');
 
-// Check if Remotion is available - if not, gracefully skip video generation
+// Check if Remotion is available
 let remotionAvailable = false;
 let bundle, renderMedia, selectComposition;
 
@@ -16,7 +17,10 @@ try {
 }
 
 /**
- * Render a reel using Remotion - falls back gracefully if Remotion is not installed
+ * Render a reel using Remotion
+ * @param {object} reelData - Reel script data from Groq
+ * @param {string} audioFilePath - Path to the generated WAV audio file
+ * @returns {Promise<string|null>} Path to rendered MP4, or null if skipped
  */
 async function renderReel(reelData, audioFilePath) {
     if (!remotionAvailable) {
@@ -24,37 +28,42 @@ async function renderReel(reelData, audioFilePath) {
         return null;
     }
 
+    if (!audioFilePath || !fs.existsSync(audioFilePath)) {
+        console.log("⚠️ No valid audio file found, skipping video generation");
+        return null;
+    }
+
     console.log("🎬 Starting Remotion render process...");
 
-    // Remotion React project path
     const remotionProjectPath = path.join(__dirname, '../../remotion-template');
     const compositionId = 'DevSprintReel';
 
     try {
-        // Bundle the React project
         console.log("📦 Bundling video template...");
         const bundleLocation = await bundle(remotionProjectPath, () =>
             console.log("   Bundling in progress...")
         );
 
-        // Input properties for the React component
         const inputProps = {
             hook: reelData.hook,
             scriptBody: reelData.scriptBody,
             callToAction: reelData.callToAction,
             onScreenText: reelData.onScreenText || [],
-            audioUrl: audioFilePath ? 'file://' + path.resolve(audioFilePath) : ''
+            audioUrl: audioFilePath,
         };
 
-        // Get composition details
         const composition = await selectComposition({
             serveUrl: bundleLocation,
             id: compositionId,
             inputProps,
         });
 
-        // Render the MP4
-        const outputLocation = path.join(__dirname, `../../output/videos/final_reel_${Date.now()}.mp4`);
+        const outputDir = path.join(__dirname, '../../output/videos');
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        const outputLocation = path.join(outputDir, `final_reel_${Date.now()}.mp4`);
         console.log(`🚀 Rendering MP4 to ${outputLocation}. This might take a minute...`);
 
         await renderMedia({

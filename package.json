@@ -21,6 +21,9 @@
     "instagram-graph-api": "^7.0.0",
     "mongoose": "^6.13.0",
     "node-cron": "^4.6.0",
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "@remotion/bundler": "^4.0.532",
+    "@remotion/renderer": "^4.0.532",
+    "remotion": "^4.0.532"
   }
 }
