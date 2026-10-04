@@ -222,6 +222,16 @@ async function hermesPublishPending(pendingPosts) {
       const publishStart = Date.now();
       const apiMetrics = { instagramLatency: 0, youtubeLatency: 0 };
 
+      // Handle stale posts FIRST: if PENDING but missing content, mark SKIPPED so queue clears
+      if (post.instagramStatus === 'PENDING' && !post.imageUrl) {
+        post.instagramStatus = 'SKIPPED';
+        logger.warn('Stale post: Instagram PENDING but no imageUrl, marking SKIPPED', { postId: post._id });
+      }
+      if (post.youtubeStatus === 'PENDING' && !post.videoPath) {
+        post.youtubeStatus = 'SKIPPED';
+        logger.warn('Stale post: YouTube PENDING but no videoPath, marking SKIPPED', { postId: post._id });
+      }
+
       // Publish to Instagram
       if (post.instagramStatus === 'PENDING' && post.imageUrl) {
         const igStart = Date.now();
@@ -249,18 +259,8 @@ async function hermesPublishPending(pendingPosts) {
         }
       }
 
-      // Handle stale posts: if PENDING but no content, mark as SKIPPED so queue clears
-      if (post.instagramStatus === 'PENDING' && !post.imageUrl) {
-        post.instagramStatus = 'SKIPPED';
-        logger.warn('Stale post: Instagram PENDING but no imageUrl, marking SKIPPED', { postId: post._id });
-      }
-      if (post.youtubeStatus === 'PENDING' && !post.videoPath) {
-        post.youtubeStatus = 'SKIPPED';
-        logger.warn('Stale post: YouTube PENDING but no videoPath, marking SKIPPED', { postId: post._id });
-      }
-
-      // Publish to Instagram
-      if (post.instagramStatus === 'PENDING' && post.imageUrl) {
+      // Publish to YouTube
+      if (post.youtubeStatus === 'PENDING' && post.videoPath) {
         const ytStart = Date.now();
         post.youtubeStatus = 'PUBLISHED';
         try {
