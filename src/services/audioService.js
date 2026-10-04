@@ -3,7 +3,12 @@ const fs = require('fs');
 const path = require('path');
 
 const HF_TOKEN = process.env.HF_TOKEN;
-const VOICE_AI_URL = 'https://api-inference.huggingface.co/models/Qwen/Qwen3-TTS';
+// Try both endpoints for redundancy
+const VOICE_AI_URLS = [
+  'https://api-inference.huggingface.co/models/Qwen/Qwen3-TTS',
+  'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Chat'
+];
+let VOICE_AI_URL = VOICE_AI_URLS[0];
 
 async function generateAudioFromText(text, filename) {
     console.log(`🎙️ Qwen3-TTS AI voiceover generate kar raha hai...`);
@@ -17,33 +22,39 @@ async function generateAudioFromText(text, filename) {
     const finalFilename = filename.replace('.mp3', '.wav');
     const outputPath = path.join(outputDir, finalFilename);
 
-    try {
-        const response = await axios({
-            method: 'POST',
-            url: VOICE_AI_URL,
-            headers: {
-                'Authorization': `Bearer ${HF_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
-            data: { inputs: text },
-            responseType: 'stream'
-        });
-
-        const writer = fs.createWriteStream(outputPath);
-        response.data.pipe(writer);
-
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => {
-                console.log(`✅ Qwen3 Audio saved successfully at: ${outputPath}`);
-                resolve(outputPath);
+    // Try multiple HF endpoints if one fails
+    let lastError;
+    for (const url of VOICE_AI_URLS) {
+        try {
+            const response = await axios({
+                method: 'POST',
+                url,
+                headers: {
+                    'Authorization': `Bearer ${HF_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                data: { inputs: text },
+                responseType: 'stream',
+                timeout: 15000
             });
-            writer.on('error', (err) => reject(err));
-        });
 
-    } catch (error) {
-        console.error("❌ Qwen3 Audio AI failed:", error.response ? error.response.statusText : error.message);
-        throw error;
+            const writer = fs.createWriteStream(outputPath);
+            response.data.pipe(writer);
+
+            return new Promise((resolve, reject) => {
+                writer.on('finish', () => {
+                    console.log(`✅ Audio saved successfully at: ${outputPath}`);
+                    resolve(outputPath);
+                });
+                writer.on('error', (err) => reject(err));
+            });
+
+        } catch (error) {
+            lastError = error;
+            console.log(`⚠️ Trying next endpoint:`, url);
+        }
     }
+    throw new Error(`All Hugging Face endpoints failed: ${lastError?.message || 'Unknown error'}`);
 }
 
 module.exports = { generateAudioFromText };

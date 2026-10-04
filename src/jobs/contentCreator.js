@@ -64,7 +64,7 @@ async function generateNextDailyPost() {
       `${selectedTopic.topic} - C++ Optimal`
     );
 
-    // 4b. Generate Video (for YouTube Shorts) - optional, may fail
+    // 4b. Generate Video (for YouTube Shorts) - optional, will not block Instagram posts
     let videoPath = null;
     try {
       console.log('[Content Creator] Generating video via Remotion...');
@@ -72,9 +72,11 @@ async function generateNextDailyPost() {
       if (reelData && reelData.audioFilePath) {
         videoPath = await renderReel(reelData.reelData, reelData.audioFilePath);
         console.log('[Content Creator] Video generated:', videoPath);
+      } else {
+        console.log('[Content Creator] No audio data returned, skipping video generation');
       }
     } catch (videoErr) {
-      console.error('[Content Creator] Video generation failed (skipping YouTube upload):', videoErr.message);
+      console.error('[Content Creator] Video generation failed (Instagram post will still be created):', videoErr.message);
       videoPath = null;
     }
 

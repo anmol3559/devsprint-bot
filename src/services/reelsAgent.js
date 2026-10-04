@@ -44,8 +44,9 @@ Format:
         return { reelData, audioFilePath };
 
     } catch (error) {
-        console.error("❌ Groq AI failed:", error.response ? error.response.data : error.message);
-        // throw error;
+        const errorDetails = error.response?.data || { message: error.message };
+        console.error("❌ Groq AI failed:", errorDetails);
+        throw new Error(`Groq API error: ${JSON.stringify(errorDetails)}`);
     }
 }
 
