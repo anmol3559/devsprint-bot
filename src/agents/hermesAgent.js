@@ -22,7 +22,7 @@ const HERMES_CONFIG = {
   GENERATION_TIMEOUT: 5 * 60 * 1000,        // 5 min for content generation
   PUBLISH_RETRY_DELAY: 10 * 60 * 1000,     // 10 min retry for failed posts
   MAX_RETRY_COUNT: 3,                      // Max publish retries per post
-  DAILY_POST_LIMIT: 4,                      // Max posts per day
+  DAILY_POST_LIMIT: 12,                      // Max posts per day
   MIN_QUEUE_SIZE: 1,                        // Keep at least this many pending posts
   PEAK_HOURS: [9, 10, 12, 17, 18, 19, 20], // Optimal posting hours (IST)
 };

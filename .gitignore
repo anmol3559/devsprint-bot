@@ -15,6 +15,7 @@ nul
 
 # Environment files (keep on local, but don't commit to GitHub)
 # .env.example only should be committed
+.env
 
 # Cache and logs
 .cache/
