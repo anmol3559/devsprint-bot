@@ -69,17 +69,30 @@ async function generateNextDailyPost() {
 
     // 4b. Generate Video (for YouTube Shorts) - optional, will not block Instagram posts
     let videoPath = null;
+    let videoError = null;
     try {
       logger.info('[Content Creator] Generating video via Remotion...');
       const reelData = await buildReelAssets(selectedTopic.topic);
       if (reelData && reelData.audioFilePath) {
+        logger.info('[Content Creator] Audio ready, starting Remotion render...');
         videoPath = await renderReel(reelData.reelData, reelData.audioFilePath);
-        logger.info('[Content Creator] Video generated', { videoPath });
+        if (videoPath) {
+          logger.info('[Content Creator] Video generated successfully', { videoPath });
+        } else {
+          videoError = 'Remotion render returned null - check Render logs for details';
+          logger.error('[Content Creator] Video generation returned null', { reelDataKeys: Object.keys(reelData.reelData || {}) });
+        }
       } else {
+        videoError = 'No audio data returned by TTS pipeline';
         logger.warn('[Content Creator] No audio data returned, skipping video generation');
       }
     } catch (videoErr) {
-      logger.error('[Content Creator] Video generation failed (Instagram post will still be created)', { error: videoErr.message });
+      videoError = `${videoErr.message}\n${videoErr.stack || ''}`;
+      logger.error('[Content Creator] Video generation failed', {
+        error: videoErr.message,
+        stack: videoErr.stack,
+        step: videoErr.message.includes('Groq') ? 'Groq script generation' : 'HF TTS or Remotion render'
+      });
       videoPath = null;
     }
 
@@ -99,7 +112,7 @@ async function generateNextDailyPost() {
         instagramStatus: 'PENDING',
         youtubeStatus: videoPath ? 'PENDING' : 'SKIPPED', // Skip YouTube if no video
         type: 'dsa',
-        errorLog: videoPath ? null : 'Video generation failed - YouTube Shorts skipped',
+        errorLog: videoPath ? null : videoError,
       });
 
       logger.info('[Content Creator] Post generated and saved', {
