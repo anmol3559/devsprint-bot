@@ -5,11 +5,11 @@ const logger = require('../utils/logger');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// Try models in order - free tier models as of 2024
+// Try models in order - free tier models as of 2025 (updated from Groq docs)
 const GROQ_MODELS = [
-  'llama-3.1-8b-instant',      // Fast, small Llama 3.1
-  'gemma2-9b-it',               // Google's Gemma 2
-  'mixtral-8x7b-32768',        // Mixtral (larger context)
+  'llama-3.1-8b-instant',       // Fast, small Llama 3.1 - primary free model
+  'openai/gpt-oss-20b',         // OpenAI GPT-OSS 20B - free tier, good quality
+  'openai/gpt-oss-120b',        // OpenAI GPT-OSS 120B - free tier, best quality
 ];
 
 async function buildReelAssets(topic) {
