@@ -65,8 +65,11 @@ function isOptimalPublishTime() {
 async function isDailyLimitReached() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // Count only posts with actual content (image) generated today
+  // Stale posts without imageUrl don't count against the limit
   const todayCount = await Post.countDocuments({
     createdAt: { $gte: today },
+    imageUrl: { $exists: true, $ne: null },
   });
   return todayCount >= HERMES_CONFIG.DAILY_POST_LIMIT;
 }
