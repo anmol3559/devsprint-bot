@@ -97,8 +97,9 @@ async function generateNextDailyPost() {
         scheduledFor: new Date(),
         status: 'PENDING',
         instagramStatus: 'PENDING',
-        youtubeStatus: 'PENDING',
+        youtubeStatus: videoPath ? 'PENDING' : 'SKIPPED', // Skip YouTube if no video
         type: 'dsa',
+        errorLog: videoPath ? null : 'Video generation failed - YouTube Shorts skipped',
       });
 
       logger.info('[Content Creator] Post generated and saved', {

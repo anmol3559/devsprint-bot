@@ -1,19 +1,22 @@
-import { AbsoluteFill, useVideoConfig, useCurrentFrame, Audio, Sequence, spring } from 'remotion';
+import { AbsoluteFill, useVideoConfig, useCurrentFrame, Audio, Sequence, spring, interpolate, useFramesToMilliseconds } from 'remotion';
 
 export const DevSprintReel = ({ hook, scriptBody, callToAction, onScreenText, audioUrl }) => {
   const { fps, width, height } = useVideoConfig();
   const frame = useCurrentFrame();
 
   const textScale = spring({ frame, fps, config: { damping: 12, stiffness: 150 } });
+  // Drive gradient rotation with frame math instead of CSS @keyframes
+  const rotation = interpolate(frame, [0, fps * 20], [0, 360], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill
       style={{
         backgroundColor: '#020617',
         color: 'white',
-        fontFamily: '"IBM Plex Sans", "Inter", system-ui, sans-serif',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
         width: '100%',
         height: '100%',
+        overflow: 'hidden',
       }}
     >
 
@@ -23,16 +26,9 @@ export const DevSprintReel = ({ hook, scriptBody, callToAction, onScreenText, au
           width: '200%',
           height: '200%',
           background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 50%, #d946ef 100%)',
-          animation: `rotate ${30 * fps} frames linear infinite`,
+          transform: `rotate(${rotation}deg)`,
           transformOrigin: 'center center',
-        }}>
-          <style jsx global>{`
-            @keyframes rotate {
-              from { transform: rotate(0deg); }
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
-        </div>
+        }}></div>
       </AbsoluteFill>
 
       {/* TTS Audio Track */}
