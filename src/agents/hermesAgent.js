@@ -5,7 +5,7 @@
  * Hermes is the brain of the DevSprint content pipeline. It autonomously:
  * 1. Monitors content queue and decides when to generate new content
  * 2. Triggers content generation based on queue state
- * 3. Publishes content to Instagram + YouTube during peak hours ONLY
+ * 3. Publishes content to Instagram during peak hours ONLY
  * 4. Handles retries, failures, and edge cases
  * 5. Prevents duplicate posts via immediate status locking
  */
@@ -14,7 +14,6 @@ const cron = require('node-cron');
 const Post = require('../models/Post');
 const { generateNextDailyPost, generateBackendPost } = require('../jobs/contentCreator');
 const { publishToInstagram } = require('../services/instagramService');
-const { uploadToYouTube } = require('../services/youtubeService');
 const logger = require('../utils/logger');
 
 // Hermes configuration
@@ -165,10 +164,6 @@ async function hermesRetryFailedPosts(failedPosts) {
         post.instagramStatus = 'PENDING';
         retryDetails.instagram = `retry #${post.retryCount}`;
       }
-      if (post.youtubeStatus === 'FAILED' && post.videoPath) {
-        post.youtubeStatus = 'PENDING';
-        retryDetails.youtube = `retry #${post.retryCount}`;
-      }
       await post.save();
       logger.postEvent('retry_scheduled', post._id, { ...retryDetails, retryCount: post.retryCount });
     } catch (retryErr) {
@@ -193,12 +188,11 @@ async function hermesPublishPending(pendingPosts) {
     return;
   }
 
-  // Filter to only posts ready to publish
+  // Filter to only posts ready to publish (Instagram only)
   const publishable = pendingPosts.filter(post => {
     const isScheduled = post.scheduledFor <= new Date();
-    const hasContent = post.imageUrl || post.videoPath;
-    // Only PENDING platforms can be published
-    const hasPendingPlatform = post.instagramStatus === 'PENDING' || post.youtubeStatus === 'PENDING';
+    const hasContent = post.imageUrl;
+    const hasPendingPlatform = post.instagramStatus === 'PENDING';
     return isScheduled && hasContent && hasPendingPlatform;
   });
 
@@ -223,16 +217,12 @@ async function hermesPublishPending(pendingPosts) {
   try {
     for (const post of publishable) {
       const publishStart = Date.now();
-      const apiMetrics = { instagramLatency: 0, youtubeLatency: 0 };
+      const apiMetrics = { instagramLatency: 0 };
 
       // Handle stale posts FIRST: if PENDING but missing content, mark SKIPPED so queue clears
       if (post.instagramStatus === 'PENDING' && !post.imageUrl) {
         post.instagramStatus = 'SKIPPED';
         logger.warn('Stale post: Instagram PENDING but no imageUrl, marking SKIPPED', { postId: post._id });
-      }
-      if (post.youtubeStatus === 'PENDING' && !post.videoPath) {
-        post.youtubeStatus = 'SKIPPED';
-        logger.warn('Stale post: YouTube PENDING but no videoPath, marking SKIPPED', { postId: post._id });
       }
 
       // Publish to Instagram
@@ -262,39 +252,8 @@ async function hermesPublishPending(pendingPosts) {
         }
       }
 
-      // Publish to YouTube
-      if (post.youtubeStatus === 'PENDING' && post.videoPath) {
-        const ytStart = Date.now();
-        post.youtubeStatus = 'PUBLISHED';
-        try {
-          const ytRes = await uploadToYouTube(post.videoPath, {
-            title: post.title || post.caption.substring(0, 100),
-            description: post.caption,
-            tags: post.tags || [],
-          });
-          post.youtubeVideoId = ytRes.id;
-          hermesAnalytics.totalPublished++;
-          apiMetrics.youtubeLatency = Date.now() - ytStart;
-          hermesAnalytics.apiMetrics.youtube.calls++;
-          hermesAnalytics.apiMetrics.youtube.totalLatencyMs += apiMetrics.youtubeLatency;
-          await post.save();
-          logger.postEvent('youtube_published', post._id, { videoId: ytRes.id, latencyMs: apiMetrics.youtubeLatency });
-        } catch (ytErr) {
-          post.youtubeStatus = 'FAILED';
-          post.errorLog = (post.errorLog || '') + `\n[YouTube] ${ytErr.message}`;
-          hermesAnalytics.totalFailed++;
-          apiMetrics.youtubeLatency = Date.now() - ytStart;
-          hermesAnalytics.apiMetrics.youtube.calls++;
-          hermesAnalytics.apiMetrics.youtube.errors++;
-          await post.save();
-          logger.postEvent('youtube_failed', post._id, { error: ytErr.message, latencyMs: apiMetrics.youtubeLatency });
-        }
-      }
-
-      // Mark as complete if both platforms done
-      const igDone = ['PUBLISHED', 'FAILED', 'SKIPPED'].includes(post.instagramStatus);
-      const ytDone = ['PUBLISHED', 'FAILED', 'SKIPPED'].includes(post.youtubeStatus);
-      if (igDone && ytDone) {
+      // Mark as complete (Instagram only)
+      if (['PUBLISHED', 'FAILED', 'SKIPPED'].includes(post.instagramStatus)) {
         post.publishedAt = new Date();
         post.status = 'PUBLISHED';
       }
@@ -326,10 +285,7 @@ async function hermesCycle() {
     // Get current queue state
     const pendingPosts = await Post.find({ status: 'PENDING' });
     const failedPosts = await Post.find({
-      $or: [
-        { instagramStatus: 'FAILED' },
-        { youtubeStatus: 'FAILED' },
-      ],
+      instagramStatus: 'FAILED',
     });
 
     logger.info('Queue state retrieved', {

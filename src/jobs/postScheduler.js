@@ -1,18 +1,14 @@
 const cron = require('node-cron');
 const Post = require('../models/Post');
 const { publishToInstagram } = require('../services/instagramService');
-const { uploadToYouTube } = require('../services/youtubeService');
 
 const startPostScheduler = () => {
   // Har 2 minute mein check karega: '*/2 * * * *'
   cron.schedule('*/2 * * * *', async () => {
     try {
-      // Get posts that still have pending work on any platform
+      // Get posts that still have pending work on Instagram
       const post = await Post.findOne({
-        $or: [
-          { instagramStatus: 'PENDING' },
-          { youtubeStatus: 'PENDING' }
-        ],
+        instagramStatus: 'PENDING',
         scheduledFor: { $lte: new Date() }
       }).sort({ scheduledFor: 1 });
 
@@ -44,46 +40,22 @@ const startPostScheduler = () => {
         console.log('[CRON] No image available, skipping Instagram.');
       }
 
-      // --- Publish to YouTube (if video available) ---
-      if (post.youtubeStatus === 'PENDING' && post.videoPath) {
-        try {
-          const ytRes = await uploadToYouTube(post.videoPath, {
-            title: post.title || post.caption.substring(0, 100),
-            description: post.caption,
-            tags: post.tags || []
-          });
-          post.youtubeVideoId = ytRes.id;
-          post.youtubeStatus = 'PUBLISHED';
-          console.log(`[CRON] Post live on YouTube! Video ID: ${ytRes.id}`);
-        } catch (ytErr) {
-          hasError = true;
-          post.youtubeStatus = 'FAILED';
-          post.errorLog = (post.errorLog || '') + `\n[YouTube] ${ytErr.message}`;
-          console.error('[CRON] YouTube upload failed:', ytErr.message);
-        }
-      } else if (post.youtubeStatus === 'PENDING' && !post.videoPath) {
-        // No video to publish - skip
-        post.youtubeStatus = 'SKIPPED';
-        console.log('[CRON] No video available, skipping YouTube.');
-      }
-
-      // Check if all platforms are done
+      // Check if Instagram is done
       const igDone = ['PUBLISHED', 'FAILED', 'SKIPPED'].includes(post.instagramStatus);
-      const ytDone = ['PUBLISHED', 'FAILED', 'SKIPPED'].includes(post.youtubeStatus);
 
-      if (igDone && ytDone) {
+      if (igDone) {
         post.publishedAt = new Date();
-        // Overall status is FAILED only if both failed; otherwise PUBLISHED
-        if (post.instagramStatus === 'FAILED' && post.youtubeStatus === 'FAILED') {
+        // Overall status
+        if (post.instagramStatus === 'FAILED') {
           post.status = 'FAILED';
         } else {
           post.status = 'PUBLISHED';
         }
-        console.log(`[CRON] Post ${post.status} - Instagram: ${post.instagramStatus}, YouTube: ${post.youtubeStatus}`);
+        console.log(`[CRON] Post ${post.status} - Instagram: ${post.instagramStatus}`);
       } else {
-        // Still pending on some platform, keep status PENDING so it gets retried
+        // Still pending, keep status PENDING so it gets retried
         post.publishedAt = null;
-        console.log(`[CRON] Post still pending - Instagram: ${post.instagramStatus}, YouTube: ${post.youtubeStatus}`);
+        console.log(`[CRON] Post still pending - Instagram: ${post.instagramStatus}`);
       }
 
       await post.save();
@@ -93,7 +65,7 @@ const startPostScheduler = () => {
     }
   });
 
-  console.log('🚀 Media Scheduler initialized (Instagram + YouTube with per-platform status).');
+  console.log('🚀 Media Scheduler initialized (Instagram only).');
 };
 
 module.exports = { startPostScheduler };

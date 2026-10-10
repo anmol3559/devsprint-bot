@@ -3,8 +3,6 @@ const { TOPICS } = require('../config/topics');
 const { generateDSAScript } = require('../generators/dsaScriptGen');
 const { generateBackendScript } = require('../generators/backendScriptGen');
 const { generateCodeCardImage } = require('../generators/cardImageGen');
-const { renderReel } = require('../services/videoStitcher');
-const { buildReelAssets } = require('../services/reelsAgent');
 const Post = require('../models/Post');
 const logger = require('../utils/logger');
 
@@ -44,16 +42,15 @@ async function generateNextDailyPost() {
       pattern: selectedTopic.pattern,
     });
 
-    // 3. Generate Content via Gemini AI
+    // 3. Generate Content via Groq/Gemini
     const aiData = await generateDSAScript(
       selectedTopic.topic,
       selectedTopic.difficulty,
       selectedTopic.pattern
     );
 
-    // Extract C++ code - use raw codeVisual, not the formatted videoScript version
+    // Extract C++ code - use raw codeVisual
     const rawCode = aiData.codeVisual || '';
-    // Extract just the C++ function (vector/int/bool/void return types)
     const codeMatch = rawCode.match(
       /(?:vector|int|bool|void)\s+[\s\S]*?\n\}/
     );
@@ -67,58 +64,28 @@ async function generateNextDailyPost() {
     );
     logger.info('[Content Creator] Image generated', { hasImage: !!imageUrl });
 
-    // 4b. Generate Video (for YouTube Shorts) - optional, will not block Instagram posts
-    let videoPath = null;
-    let videoError = null;
-    try {
-      logger.info('[Content Creator] Generating video via Remotion...');
-      const reelData = await buildReelAssets(selectedTopic.topic);
-      if (reelData && reelData.audioFilePath) {
-        logger.info('[Content Creator] Audio ready, starting Remotion render...');
-        videoPath = await renderReel(reelData.reelData, reelData.audioFilePath);
-        if (videoPath) {
-          logger.info('[Content Creator] Video generated successfully', { videoPath });
-        } else {
-          videoError = 'Remotion render returned null - check Render logs for details';
-          logger.error('[Content Creator] Video generation returned null', { reelDataKeys: Object.keys(reelData.reelData || {}) });
-        }
-      } else {
-        videoError = 'No audio data returned by TTS pipeline';
-        logger.warn('[Content Creator] No audio data returned, skipping video generation');
-      }
-    } catch (videoErr) {
-      videoError = `${videoErr.message}\n${videoErr.stack || ''}`;
-      logger.error('[Content Creator] Video generation failed', {
-        error: videoErr.message,
-        stack: videoErr.stack,
-        step: videoErr.message.includes('Groq') ? 'Groq script generation' : 'HF TTS or Remotion render'
-      });
-      videoPath = null;
-    }
-
     // 5. Format Caption & Tags
     const caption = `${aiData.title}\n\n${aiData.description}\n\n💡 Optimal Strategy:\n${aiData.videoScript?.logicBreakdown || ''}\n\n#cpp #datastructures #leetcode #coding #softwareengineering`;
 
-    // 6. Queue Post into MongoDB
+    // 6. Queue Post into MongoDB - Instagram only (no video/YouTube)
     try {
       const newPost = await Post.create({
         imageUrl,
-        videoPath,
+        videoPath: null,
         title: aiData.title,
         caption,
         tags: aiData.tags || [],
         scheduledFor: new Date(),
         status: 'PENDING',
-        instagramStatus: 'PENDING',
-        youtubeStatus: videoPath ? 'PENDING' : 'SKIPPED', // Skip YouTube if no video
+        instagramStatus: imageUrl ? 'PENDING' : 'SKIPPED',
+        youtubeStatus: 'SKIPPED', // No YouTube posting
         type: 'dsa',
-        errorLog: videoPath ? null : videoError,
+        errorLog: imageUrl ? null : 'Image generation failed',
       });
 
       logger.info('[Content Creator] Post generated and saved', {
         postId: newPost._id,
         hasImage: !!newPost.imageUrl,
-        hasVideo: !!newPost.videoPath,
       });
       return newPost;
     } catch (dbErr) {
@@ -158,7 +125,7 @@ async function generateBackendPost() {
       }
     }
 
-    // Queue post
+    // Queue post - Instagram only
     try {
       const newPost = await Post.create({
         imageUrl,
@@ -168,7 +135,7 @@ async function generateBackendPost() {
         tags: aiData.tags || [],
         scheduledFor: new Date(),
         status: 'PENDING',
-        instagramStatus: imageUrl ? 'PENDING' : 'SKIPPED', // Only Instagram if image exists
+        instagramStatus: imageUrl ? 'PENDING' : 'SKIPPED',
         youtubeStatus: 'SKIPPED',
         type: 'backend',
       });
