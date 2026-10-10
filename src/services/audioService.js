@@ -4,11 +4,13 @@ const path = require('path');
 
 const HF_TOKEN = process.env.HF_TOKEN;
 
-// Use a proper TTS model endpoint - try multiple options
+// Working TTS models on HuggingFace Inference API (as of 2025)
+// wav2vec2 is ASR (speech-to-text), NOT TTS - replaced with actual TTS models
 const VOICE_AI_URLS = [
-  'https://api-inference.huggingface.co/models/facebook/wav2vec2-ljspeech-distilled',
-  'https://api-inference.huggingface.co/models/facebook/mms-tts-eng',
-  'https://api-inference.huggingface.co/models/facebook/fastspeech2-ljspeech',
+  'https://api-inference.huggingface.co/models/hexgrad/Kokoro-82M',           // Best free TTS, fast, natural
+  'https://api-inference.huggingface.co/models/microsoft/speecht5_tts',       // Microsoft SpeechT5, reliable
+  'https://api-inference.huggingface.co/models/facebook/mms-tts-eng',         // Meta MMS TTS English
+  'https://api-inference.huggingface.co/models/parler-tts/parler_tts_mini_v0.1', // Parler-TTS mini
 ];
 
 async function generateAudioFromText(text, filename) {

@@ -1,5 +1,6 @@
 // src/generators/dsaScriptGen.js
 const { generateAIContent } = require('../services/aiService');
+const { generateContentViaGroq } = require('../services/groqService');
 
 const generateDSAScript = async (problemName, difficulty, topic) => {
     if (!problemName || !difficulty || !topic) {
@@ -15,7 +16,13 @@ const generateDSAScript = async (problemName, difficulty, topic) => {
     - codeVisual: A short, extremely clean C++ code snippet showing just the core logic function.
     `;
 
-    const aiData = await generateAIContent(prompt);
+    let aiData;
+    try {
+        aiData = await generateContentViaGroq(prompt, 'dsa_script');
+    } catch (groqErr) {
+        console.log('[DSA Script Gen] Groq failed, falling back to Gemini:', groqErr.message);
+        aiData = await generateAIContent(prompt);
+    }
 
     return {
         title: `Crack ${problemName} in 60 Seconds! 🚀 C++ ${topic} | DevSprint`,

@@ -1,5 +1,6 @@
 // src/generators/backendScriptGen.js
 const { generateAIContent } = require('../services/aiService');
+const { generateContentViaGroq } = require('../services/groqService');
 
 const generateBackendScript = async (concept, analogy) => {
     if (!concept || !analogy) {
@@ -14,7 +15,13 @@ const generateBackendScript = async (concept, analogy) => {
     - useCase: A 1-sentence real-world example of a large tech company using this pattern and why.
     `;
 
-    const aiData = await generateAIContent(prompt);
+    let aiData;
+    try {
+        aiData = await generateContentViaGroq(prompt, 'backend_script');
+    } catch (groqErr) {
+        console.log('[Backend Script Gen] Groq failed, falling back to Gemini:', groqErr.message);
+        aiData = await generateAIContent(prompt);
+    }
 
     // Create a conceptual ASCII diagram for the image
     const codeVisual = `# ${concept} Architecture\n\nClient Request\n      ↓\n[${concept}]\n      ↓\n  Response\n`;
