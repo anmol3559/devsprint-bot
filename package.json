@@ -16,14 +16,10 @@
     "cloudinary": "^2.11.0",
     "dotenv": "^18.0.3",
     "express": "^5.2.1",
-    "google-tts-api": "^2.0.2",
     "googleapis": "^181.0.0",
     "instagram-graph-api": "^7.0.0",
     "mongoose": "^6.13.0",
     "node-cron": "^4.6.0",
-    "sharp": "^0.35.5",
-    "@remotion/bundler": "^4.0.532",
-    "@remotion/renderer": "^4.0.532",
-    "remotion": "^4.0.532"
+    "sharp": "^0.35.5"
   }
 }
